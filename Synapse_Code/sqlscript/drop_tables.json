@@ -1,0 +1,20 @@
+{
+	"name": "drop_tables",
+	"properties": {
+		"folder": {
+			"name": "src/testing"
+		},
+		"content": {
+			"query": "\n--DROP TABLE dim_tipos_polen;\n--DROP TABLE dim_captadores;\n--DROP TABLE staging_mediciones;\n--DROP TABLE fact_mediciones;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sqlpool",
+				"poolName": "sqlpool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

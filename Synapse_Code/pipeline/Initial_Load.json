@@ -1,0 +1,227 @@
+{
+	"name": "Initial_Load",
+	"properties": {
+		"activities": [
+			{
+				"name": "ingest_dimensions",
+				"type": "SynapseNotebook",
+				"dependsOn": [
+					{
+						"activity": "Wait",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "ingest_dimensions",
+						"type": "NotebookReference"
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "sparkpool",
+						"type": "BigDataPoolReference"
+					},
+					"executorSize": "Small",
+					"conf": {
+						"spark.dynamicAllocation.enabled": null,
+						"spark.dynamicAllocation.minExecutors": 1,
+						"spark.dynamicAllocation.maxExecutors": 1
+					},
+					"driverSize": "Small",
+					"numExecutors": 1,
+					"authentication": {
+						"type": "MSI"
+					}
+				}
+			},
+			{
+				"name": "ingest_historical_fact",
+				"type": "SynapseNotebook",
+				"dependsOn": [
+					{
+						"activity": "Wait",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "ingest_historical_fact",
+						"type": "NotebookReference"
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "sparkpool",
+						"type": "BigDataPoolReference"
+					},
+					"executorSize": "Small",
+					"conf": {
+						"spark.dynamicAllocation.enabled": null,
+						"spark.dynamicAllocation.minExecutors": 1,
+						"spark.dynamicAllocation.maxExecutors": 1
+					},
+					"driverSize": "Small",
+					"numExecutors": 1,
+					"authentication": {
+						"type": "MSI"
+					}
+				}
+			},
+			{
+				"name": "transform_validate_dimensions",
+				"type": "SynapseNotebook",
+				"dependsOn": [
+					{
+						"activity": "ingest_dimensions",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "transform_validate_dimensions",
+						"type": "NotebookReference"
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "sparkpool",
+						"type": "BigDataPoolReference"
+					},
+					"executorSize": "Small",
+					"conf": {
+						"spark.dynamicAllocation.enabled": null,
+						"spark.dynamicAllocation.minExecutors": 1,
+						"spark.dynamicAllocation.maxExecutors": 1
+					},
+					"driverSize": "Small",
+					"numExecutors": 1,
+					"authentication": {
+						"type": "MSI"
+					}
+				}
+			},
+			{
+				"name": "transform_validate_fact",
+				"type": "SynapseNotebook",
+				"dependsOn": [
+					{
+						"activity": "ingest_historical_fact",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "transform_validate_fact",
+						"type": "NotebookReference"
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "sparkpool",
+						"type": "BigDataPoolReference"
+					},
+					"executorSize": "Small",
+					"conf": {
+						"spark.dynamicAllocation.enabled": null,
+						"spark.dynamicAllocation.minExecutors": 1,
+						"spark.dynamicAllocation.maxExecutors": 1
+					},
+					"driverSize": "Small",
+					"numExecutors": 1,
+					"authentication": {
+						"type": "MSI"
+					}
+				}
+			},
+			{
+				"name": "Wait",
+				"type": "Wait",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 10
+				}
+			},
+			{
+				"name": "load_into_dwh",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "transform_validate_dimensions",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "transform_validate_fact",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "synwazdatengtfg-WorkspaceDefaultSqlServer",
+					"type": "LinkedServiceReference",
+					"parameters": {
+						"DBName": "sqlpool"
+					}
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": "CREATE TABLE [dbo].[stg_tipos_polen] (\n    codigo NVARCHAR(64),\n    descripcion NVARCHAR(512)\n);\n\nCOPY INTO [dbo].[stg_tipos_polen] (\n    codigo,\n    descripcion\n)\nFROM 'https://stazdatengtfg.dfs.core.windows.net/data/cleaned/descripciones_polen'\nWITH (\n    FILE_TYPE = 'PARQUET'\n);\n\nUPDATE target\nSET target.descripcion = source.descripcion\nFROM [dbo].[dim_tipos_polen] target\nJOIN [dbo].[stg_tipos_polen] source\n    ON target.codigo = source.codigo;\n\nINSERT INTO [dbo].[dim_tipos_polen] (codigo, descripcion)\nSELECT codigo, descripcion\nFROM [dbo].[stg_tipos_polen]\nWHERE codigo NOT IN (SELECT codigo FROM [dbo].[dim_tipos_polen]);\n\n\nDROP TABLE [dbo].[stg_tipos_polen];\n\n\n\n\n\n\n\n\nCREATE TABLE [dbo].[stg_captadores] (\n    codigo VARCHAR(64),\n    nombre VARCHAR(255),\n    descripcion VARCHAR(255),\n    url_infoweb VARCHAR(255),\n    direccion_localidad VARCHAR(255),  \n    direccion_ubicacion VARCHAR(255),\n    direccion_codigo_postal INT,\n    zbs_geocodigo INT,\n    zbs_nombre VARCHAR(255),\n    fecha_inicio_mediciones VARCHAR(64),\n    numero_tipos_de_polen_registrados INT,\n    tipos_de_polen_registrados VARCHAR(255),\n    altura_del_captador FLOAT,\n    altitud FLOAT,\n    x_epsg25830 FLOAT,\n    y_epsg25830 FLOAT,\n    lat_epsg4258 FLOAT,\n    long_epsg4258 FLOAT,\n    red_esp_aerobiologia BIT,\n    url_calendario_polinico VARCHAR(255),  \n    edificio VARCHAR(255), \n    departamento_responsable VARCHAR(255), \n    contacto_email VARCHAR(255),\n    tipo_titularidad VARCHAR(255)\n);\n\nCOPY INTO [dbo].[stg_captadores]\n    (codigo,\n    nombre,\n    descripcion,\n    url_infoweb,\n    direccion_localidad,\n    direccion_ubicacion,\n    direccion_codigo_postal,\n    zbs_geocodigo,\n    zbs_nombre,\n    fecha_inicio_mediciones,\n    numero_tipos_de_polen_registrados,\n    tipos_de_polen_registrados,\n    altura_del_captador,\n    altitud,\n    x_epsg25830,\n    y_epsg25830,\n    lat_epsg4258,\n    long_epsg4258,\n    red_esp_aerobiologia,\n    url_calendario_polinico,\n    edificio,\n    departamento_responsable,\n    contacto_email,\n    tipo_titularidad)\nFROM 'https://stazdatengtfg.dfs.core.windows.net/data/cleaned/captadores'\nWITH (\n    FILE_TYPE = 'PARQUET'\n);\n\nUPDATE target\nSET target.nombre = source.nombre,\n    target.descripcion = source.descripcion,\n    target.url_infoweb = source.url_infoweb,\n    target.direccion_localidad = source.direccion_localidad,\n    target.direccion_ubicacion = source.direccion_ubicacion,\n    target.direccion_codigo_postal = source.direccion_codigo_postal,\n    target.zbs_geocodigo = source.zbs_geocodigo,\n    target.zbs_nombre = source.zbs_nombre,\n    target.fecha_inicio_mediciones = source.fecha_inicio_mediciones,\n    target.numero_tipos_de_polen_registrados = source.numero_tipos_de_polen_registrados,\n    target.tipos_de_polen_registrados = source.tipos_de_polen_registrados,\n    target.altura_del_captador = source.altura_del_captador,\n    target.altitud = source.altitud,\n    target.x_epsg25830 = source.x_epsg25830,\n    target.y_epsg25830 = source.y_epsg25830,\n    target.lat_epsg4258 = source.lat_epsg4258,\n    target.long_epsg4258 = source.long_epsg4258,\n    target.red_esp_aerobiologia = source.red_esp_aerobiologia,\n    target.url_calendario_polinico = source.url_calendario_polinico,\n    target.edificio = source.edificio,\n    target.departamento_responsable = source.departamento_responsable,\n    target.contacto_email = source.contacto_email,\n    target.tipo_titularidad = source.tipo_titularidad\nFROM [dbo].[dim_captadores] target\nJOIN [dbo].[stg_captadores] source\n    ON target.codigo = source.codigo;\n\nINSERT INTO [dbo].[dim_captadores]\n    (codigo, nombre, descripcion, url_infoweb, direccion_localidad, direccion_ubicacion,\n    direccion_codigo_postal, zbs_geocodigo, zbs_nombre, fecha_inicio_mediciones,\n    numero_tipos_de_polen_registrados, tipos_de_polen_registrados, altura_del_captador,\n    altitud, x_epsg25830, y_epsg25830, lat_epsg4258, long_epsg4258, red_esp_aerobiologia,\n    url_calendario_polinico, edificio, departamento_responsable, contacto_email, tipo_titularidad)\nSELECT codigo, nombre, descripcion, url_infoweb, direccion_localidad, direccion_ubicacion,\n    direccion_codigo_postal, zbs_geocodigo, zbs_nombre, fecha_inicio_mediciones,\n    numero_tipos_de_polen_registrados, tipos_de_polen_registrados, altura_del_captador,\n    altitud, x_epsg25830, y_epsg25830, lat_epsg4258, long_epsg4258, red_esp_aerobiologia,\n    url_calendario_polinico, edificio, departamento_responsable, contacto_email, tipo_titularidad\nFROM [dbo].[stg_captadores] source\nWHERE source.codigo NOT IN (SELECT codigo FROM [dbo].[dim_captadores]);\n\nDROP TABLE [dbo].[stg_captadores];\n\n\n\n\n\nCREATE TABLE [dbo].[aux_staging_mediciones] (\n    tipo_polen_codigo VARCHAR(64),\n    captador_codigo VARCHAR(64),\n    granos_polen_metro_cubico INT,\n    fecha_lectura VARCHAR(64)\n);\n\nCOPY INTO [dbo].[aux_staging_mediciones]\n    (tipo_polen_codigo, captador_codigo, granos_polen_metro_cubico, fecha_lectura)\nFROM 'https://stazdatengtfg.dfs.core.windows.net/data/cleaned/mediciones'\nWITH (\n    FILE_TYPE = 'PARQUET'\n);\n\nUPDATE target\nSET target.granos_polen_metro_cubico = source.granos_polen_metro_cubico\nFROM [dbo].[staging_mediciones] target\nJOIN [dbo].[aux_staging_mediciones] source\n    ON target.tipo_polen_codigo = source.tipo_polen_codigo\n    AND target.captador_codigo = source.captador_codigo\n    AND CAST(target.fecha_lectura AS DATE) = CAST(source.fecha_lectura AS DATE);\n\nINSERT INTO [dbo].[staging_mediciones] (tipo_polen_codigo, captador_codigo, granos_polen_metro_cubico, fecha_lectura)\nSELECT tipo_polen_codigo, captador_codigo, granos_polen_metro_cubico, fecha_lectura\nFROM [dbo].[aux_staging_mediciones] source\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM [dbo].[staging_mediciones] target\n    WHERE target.tipo_polen_codigo = source.tipo_polen_codigo\n    AND target.captador_codigo = source.captador_codigo\n    AND CAST(target.fecha_lectura AS DATE) = CAST(source.fecha_lectura AS DATE)\n);\n\nDROP TABLE [dbo].[aux_staging_mediciones];\n\n\n\nTRUNCATE TABLE [dbo].[fact_mediciones];\n\nINSERT INTO [dbo].[fact_mediciones] (tipo_polen_id, captador_id, granos_polen_metro_cubico, fecha_lectura)\nSELECT t.id, c.id, s.granos_polen_metro_cubico, s.fecha_lectura\nFROM [dbo].[staging_mediciones] s\nINNER JOIN [dbo].[dim_tipos_polen] t ON s.tipo_polen_codigo = t.codigo\nINNER JOIN [dbo].[dim_captadores] c ON s.captador_codigo = c.codigo;"
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			}
+		],
+		"annotations": []
+	}
+}

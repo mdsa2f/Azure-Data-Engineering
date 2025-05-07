@@ -1,0 +1,202 @@
+{
+	"name": "ingest_incremental_fact",
+	"properties": {
+		"folder": {
+			"name": "src/extraction/fact"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkpool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "be1eac91-9661-4fba-9de7-1cfdf27fd6b9"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/170ebf0f-ad28-434f-a1f5-be6796cc53f4/resourceGroups/rgazdatengtfg/providers/Microsoft.Synapse/workspaces/synwazdatengtfg/bigDataPools/sparkpool",
+				"name": "sparkpool",
+				"type": "Spark",
+				"endpoint": "https://synwazdatengtfg.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"import requests\n",
+					"from bs4 import BeautifulSoup\n",
+					"from io import StringIO\n",
+					"\n",
+					"\n",
+					"from pyspark.sql import SparkSession\n",
+					"from pyspark.sql.types import StructType, StructField, StringType\n",
+					"from pyspark.sql.functions import to_date, regexp_replace"
+				],
+				"execution_count": 1
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"measures_url = \"https://datos.comunidad.madrid/dataset/e608aace-3593-43a3-8c91-02332137fa83/resource/1f2c4851-b69b-4daa-85ae-89f56cabc67d/download/mediciones_polen.csv\""
+				],
+				"execution_count": 2
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"storage_account_name = \"stazdatengtfg\"\n",
+					"container_name = \"data\"\n",
+					"folder_path = \"raw\"\n",
+					"file_format = \"parquet\""
+				],
+				"execution_count": 3
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Get or create Spark session\n",
+					"spark = SparkSession.builder.getOrCreate()  "
+				],
+				"execution_count": 4
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\n",
+					"\n",
+					"def extract_from_madrid_url(url: str):\n",
+					"    \"\"\"\n",
+					"    This function gets pollen data from datos.gob.es\n",
+					"\n",
+					"    \"\"\"\n",
+					"    \n",
+					"    # Fetch CSV content from the URL\n",
+					"    response = requests.get(url)\n",
+					"    response.encoding='latin1'\n",
+					"    if response.status_code != 200:\n",
+					"        raise Exception(f\"Failed to fetch data, status code: {response.status_code}\")\n",
+					"\n",
+					"    csv_data = response.text.strip()  # Get CSV content as string\n",
+					"\n",
+					"    # Convert CSV text to list of rows\n",
+					"    lines = csv_data.split(\"\\n\")  # Split by newline\n",
+					"\n",
+					"    # Extract header and remove unwanted characters\n",
+					"    header = [col.strip(\"\\r\") for col in lines[0].split(\";\")]\n",
+					"\n",
+					"    # Process rows, stripping \\r from each field\n",
+					"    data_rows = [list(map(lambda x: x.strip(\"\\r\"), line.split(\";\"))) for line in lines[1:] if line.strip()]\n",
+					"\n",
+					"\n",
+					"    # Define schema dynamically (assuming all fields as StringType for simplicity)\n",
+					"    schema = StructType([StructField(col, StringType(), True) for col in header])\n",
+					"\n",
+					"    # Create Spark DataFrame\n",
+					"    df = spark.createDataFrame(data_rows, schema=schema)\n",
+					"\n",
+					"    print(\"Show 5 first rows: \")\n",
+					"    df.show(5)\n",
+					"\n",
+					"    return df\n",
+					""
+				],
+				"execution_count": 5
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def visualize_df(df):\n",
+					"    # Display DataFrame schema\n",
+					"    df.printSchema()\n",
+					"\n",
+					"    # Show first few rows\n",
+					"    df.show(5)"
+				],
+				"execution_count": 6
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Government Extraction for Measures information\n",
+					"df_measures = extract_from_madrid_url(measures_url)\n",
+					"\n",
+					"# Convert fecha_lectura to date only (ignores time part)\n",
+					"df_measures = df_measures.withColumn(\"fecha_lectura\", to_date(df_measures[\"fecha_lectura\"]))\n",
+					""
+				],
+				"execution_count": 7
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"df_measures = df_measures.withColumn(\"tipo_polinico\", regexp_replace(\"tipo_polinico\", \" \", \"_\"))"
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"visualize_df(df_measures)"
+				],
+				"execution_count": 10
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Build the ADLS Path (ABFS format for direct writing)\n",
+					"adls_path = f\"abfss://{container_name}@{storage_account_name}.dfs.core.windows.net/{folder_path}/\""
+				],
+				"execution_count": 11
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Write DataFrame to ADLS in Parquet format\n",
+					"df_measures.write.format(file_format).mode(\"overwrite\").option(\"header\", \"true\").partitionBy(\"fecha_lectura\").save(adls_path + \"/mediciones\")\n",
+					"\n",
+					"print(f\"Data successfully written to {adls_path}\")"
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Stop the Spark session\n",
+					"spark.stop()"
+				],
+				"execution_count": 23
+			}
+		]
+	}
+}

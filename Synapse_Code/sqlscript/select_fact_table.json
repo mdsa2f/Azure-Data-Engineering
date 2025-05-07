@@ -1,0 +1,20 @@
+{
+	"name": "select_fact_table",
+	"properties": {
+		"folder": {
+			"name": "src/testing"
+		},
+		"content": {
+			"query": "SELECT TOP (100) [id]\n,[tipo_polen_id]\n,[captador_id]\n,[granos_polen_metro_cubico]\n,[fecha_lectura]\n FROM [dbo].[fact_mediciones]\n ORDER BY [fecha_lectura] DESC",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sqlpool",
+				"poolName": "sqlpool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

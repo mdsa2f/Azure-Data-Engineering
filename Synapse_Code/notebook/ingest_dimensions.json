@@ -1,0 +1,322 @@
+{
+	"name": "ingest_dimensions",
+	"properties": {
+		"folder": {
+			"name": "src/extraction/dimension"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkpool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "e748de63-1f21-4432-8dee-f7aa97b43f72"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/170ebf0f-ad28-434f-a1f5-be6796cc53f4/resourceGroups/rgazdatengtfg/providers/Microsoft.Synapse/workspaces/synwazdatengtfg/bigDataPools/sparkpool",
+				"name": "sparkpool",
+				"type": "Spark",
+				"endpoint": "https://synwazdatengtfg.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"import requests\n",
+					"from bs4 import BeautifulSoup\n",
+					"from io import StringIO\n",
+					"import re\n",
+					"\n",
+					"from pyspark.sql import SparkSession\n",
+					"from pyspark.sql.types import StructType, StructField, StringType\n",
+					"from pyspark.sql.functions import to_date, regexp_replace\n",
+					""
+				],
+				"execution_count": 1
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"sensors_url = \"https://datos.comunidad.madrid/dataset/32eadfbb-6954-413d-83ed-7ceb77de72a9/resource/763f86ed-1f4d-4890-8ff8-a86910a2fe73/download/captadores_polen.csv\""
+				],
+				"execution_count": 2
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"lookup_pollen = {\n",
+					"    'Abedul': 'https://es.wikipedia.org/wiki/Abedul',\n",
+					"    'Aligustre': 'https://es.wikipedia.org/wiki/Aligustre',\n",
+					"    'Aliso': 'https://es.wikipedia.org/wiki/Alnus_glutinosa',\n",
+					"    'Arce': 'https://es.wikipedia.org/wiki/Arce',\n",
+					"    'Artemisia': 'https://es.wikipedia.org/wiki/Artemisia_(planta)',\n",
+					"    'Castaño': 'https://es.wikipedia.org/wiki/Castanea',\n",
+					"    'Compuestas': 'https://es.wikipedia.org/wiki/Compuestas',\n",
+					"    'Corylus': 'https://es.wikipedia.org/wiki/Corylus',\n",
+					"    'Cupresáceas/Taxáceas': 'https://es.wikipedia.org/wiki/Cupressaceae',\n",
+					"    'Ericaceae': 'https://es.wikipedia.org/wiki/Ericaceae',\n",
+					"    'Eucalipto': 'https://es.wikipedia.org/wiki/Eucalipto',\n",
+					"    'Fresno': 'https://es.wikipedia.org/wiki/Fresno',\n",
+					"    'Gramíneas': 'https://es.wikipedia.org/wiki/Gramíneas',\n",
+					"    'Moreras': 'https://es.wikipedia.org/wiki/Morus_(planta)',\n",
+					"    'Olivo': 'https://es.wikipedia.org/wiki/Olivo',\n",
+					"    'Olmos': 'https://es.wikipedia.org/wiki/Ulmus',\n",
+					"    'Otros': None,\n",
+					"    'Pinos': 'https://es.wikipedia.org/wiki/Pinus',\n",
+					"    'Plantago': 'https://es.wikipedia.org/wiki/Plantago',\n",
+					"    'Plátano_de_paseo': 'https://es.wikipedia.org/wiki/Platanaceae',\n",
+					"    'PNI_(Polen_no_identificado)': None,\n",
+					"    'Populus': 'https://es.wikipedia.org/wiki/Populus',\n",
+					"    'Quenopodiáceas/Amarantáceas': 'https://es.wikipedia.org/wiki/Chenopodioideae',\n",
+					"    'Quercus': 'https://es.wikipedia.org/wiki/Quercus',\n",
+					"    'Rumex_(Acederas)': 'https://es.wikipedia.org/wiki/Rumex',\n",
+					"    'Sauces': 'https://es.wikipedia.org/wiki/Sauces',\n",
+					"    'Urticaceae_(Ortigas)': 'https://es.wikipedia.org/wiki/Urticaceae'\n",
+					"}\n",
+					""
+				],
+				"execution_count": 3
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"storage_account_name = \"stazdatengtfg\"\n",
+					"container_name = \"data\"\n",
+					"folder_path = \"raw\"\n",
+					"file_format = \"parquet\""
+				],
+				"execution_count": 4
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Get or create Spark session\n",
+					"spark = SparkSession.builder.getOrCreate()  "
+				],
+				"execution_count": 5
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def get_first_sentence(text):\n",
+					"    import re\n",
+					"\n",
+					"    match_re = re.search(r'\\. [A-Z]', text)\n",
+					"\n",
+					"    if match_re:\n",
+					"        result = text[:match_re.start() + 1]  # include the period\n",
+					"    else:\n",
+					"        result = text  # pattern not found, return whole string\n",
+					"\n",
+					"    return result\n",
+					""
+				],
+				"execution_count": 6
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def extract_from_wikipedia(url: str):\n",
+					"    \"\"\"\n",
+					"    This function gets pollen data from wikipedia.es\n",
+					"\n",
+					"    \"\"\"\n",
+					"\n",
+					"    try:\n",
+					"        # Fetch CSV content from the URL\n",
+					"        response = requests.get(url)\n",
+					"        if response.status_code != 200:\n",
+					"            raise Exception(f\"Failed to fetch data, status code: {response.status_code}\")\n",
+					"        \n",
+					"        # Ensure proper encoding\n",
+					"        response.encoding = 'utf-8'  \n",
+					"\n",
+					"        # Parse the HTML content\n",
+					"        soup = BeautifulSoup(response.text, 'html.parser')\n",
+					"\n",
+					"        # Find the first <p> tag inside the div with class \"mw-content-ltr mw-parser-output\"\n",
+					"        content_div = soup.find('div', class_='mw-content-ltr mw-parser-output')\n",
+					"        p_tags = content_div.find_all('p')\n",
+					"     \n",
+					"        cleaned_paragraphs = [p.get_text(separator=\" \", strip=True) for p in p_tags]\n",
+					"        for p in cleaned_paragraphs:\n",
+					"            if len(p) > 200:\n",
+					"                return get_first_sentence(p.replace('\\u200b', '')) #.split(\".\")[0]\n",
+					"\n",
+					"    except:\n",
+					"        #print(\"Error\")\n",
+					"        return None\n",
+					"\n",
+					"    "
+				],
+				"execution_count": 7
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\n",
+					"\n",
+					"def extract_from_madrid_url(url: str):\n",
+					"    \"\"\"\n",
+					"    This function gets pollen data from datos.gob.es\n",
+					"\n",
+					"    \"\"\"\n",
+					"    \n",
+					"    # Fetch CSV content from the URL\n",
+					"    response = requests.get(url)\n",
+					"    response.encoding='latin1'\n",
+					"    if response.status_code != 200:\n",
+					"        raise Exception(f\"Failed to fetch data, status code: {response.status_code}\")\n",
+					"\n",
+					"    csv_data = response.text.strip()  # Get CSV content as string\n",
+					"\n",
+					"    # Convert CSV text to list of rows\n",
+					"    lines = csv_data.split(\"\\n\")  # Split by newline\n",
+					"\n",
+					"    # Extract header and remove unwanted characters\n",
+					"    header = [col.strip(\"\\r\") for col in lines[0].split(\";\")]\n",
+					"\n",
+					"    # Process rows, stripping \\r from each field\n",
+					"    data_rows = [list(map(lambda x: x.strip(\"\\r\"), line.split(\";\"))) for line in lines[1:] if line.strip()]\n",
+					"\n",
+					"\n",
+					"    # Define schema dynamically (assuming all fields as StringType for simplicity)\n",
+					"    schema = StructType([StructField(col, StringType(), True) for col in header])\n",
+					"\n",
+					"    # Create Spark DataFrame\n",
+					"    df = spark.createDataFrame(data_rows, schema=schema)\n",
+					"\n",
+					"    print(\"Show 5 first rows: \")\n",
+					"    df.show(5)\n",
+					"\n",
+					"    return df\n",
+					""
+				],
+				"execution_count": 8
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def visualize_df(df):\n",
+					"    # Display DataFrame schema\n",
+					"    df.printSchema()\n",
+					"\n",
+					"    # Show first few rows\n",
+					"    df.show(5)"
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Wikipedia Extraction for Pollen Descriptions\n",
+					"pollen_descriptions = {element: extract_from_wikipedia(lookup_pollen[element]) for element in lookup_pollen.keys()}\n",
+					"\n",
+					"# Convert dictionary to list of rows\n",
+					"pollen_descriptions = [(key, value) for key, value in pollen_descriptions.items()]\n",
+					"\n",
+					"# Create DataFrame\n",
+					"df_pollen_types = spark.createDataFrame(pollen_descriptions, [\"Pollen_Type\", \"Description\"])"
+				],
+				"execution_count": 10
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Government Extraction for Sensor Information\n",
+					"df_sensors = extract_from_madrid_url(sensors_url)"
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"df_pollen_types = df_pollen_types.fillna(\"Sin descripción\", subset=[\"Description\"])"
+				],
+				"execution_count": 14
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"df_pollen_types = df_pollen_types.withColumn(\n",
+					"    \"Description\",regexp_replace(\"Description\", r\"\\[\\s*\\d+\\s*\\]\", \"\")\n",
+					")"
+				],
+				"execution_count": 16
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"visualize_df(df_pollen_types)"
+				],
+				"execution_count": 18
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"visualize_df(df_sensors)"
+				],
+				"execution_count": 19
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Build the ADLS Path (ABFS format for direct writing)\n",
+					"adls_path = f\"abfss://{container_name}@{storage_account_name}.dfs.core.windows.net/{folder_path}/\""
+				],
+				"execution_count": 20
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Write DataFrame to ADLS in Parquet format\n",
+					"df_sensors.write.format(file_format).mode(\"overwrite\").option(\"header\", \"true\").save(adls_path + \"/captadores\")\n",
+					"df_pollen_types.write.format(file_format).mode(\"overwrite\").option(\"header\", \"true\").save(adls_path + \"/descripciones_polen\")\n",
+					"\n",
+					"print(f\"Data successfully written to {adls_path}\")"
+				],
+				"execution_count": 21
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Stop the Spark session\n",
+					"spark.stop()"
+				],
+				"execution_count": 4
+			}
+		]
+	}
+}

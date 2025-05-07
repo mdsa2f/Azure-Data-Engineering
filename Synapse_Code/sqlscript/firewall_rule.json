@@ -1,0 +1,20 @@
+{
+	"name": "firewall_rule",
+	"properties": {
+		"folder": {
+			"name": "src/testing"
+		},
+		"content": {
+			"query": "-- Enable Azure connections.\n-- https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-set-firewall-rule-azure-sql-database?view=azuresqldb-current\nEXEC sp_set_firewall_rule N'Allow Azure', '0.0.0.0', '0.0.0.0';",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "master",
+				"poolName": "sqlpool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

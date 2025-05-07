@@ -1,0 +1,206 @@
+{
+	"name": "transform_validate_fact",
+	"properties": {
+		"folder": {
+			"name": "src/transformation"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkpool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "e7604fc8-1fdc-44d1-a708-f889c3441ff6"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/170ebf0f-ad28-434f-a1f5-be6796cc53f4/resourceGroups/rgazdatengtfg/providers/Microsoft.Synapse/workspaces/synwazdatengtfg/bigDataPools/sparkpool",
+				"name": "sparkpool",
+				"type": "Spark",
+				"endpoint": "https://synwazdatengtfg.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"import requests\n",
+					"from bs4 import BeautifulSoup\n",
+					"from io import StringIO\n",
+					"\n",
+					"\n",
+					"from pyspark.sql import SparkSession\n",
+					"from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, BooleanType, DoubleType\n",
+					"from pyspark.sql.functions import to_date, col"
+				],
+				"execution_count": 2
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"storage_account_name = \"stazdatengtfg\"\n",
+					"container_name = \"data\"\n",
+					"folder_path_origin = \"raw\"\n",
+					"folder_path_target = \"cleaned\"\n",
+					"file_format = \"parquet\""
+				],
+				"execution_count": 3
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Get or create Spark session\n",
+					"spark = SparkSession.builder.getOrCreate()  "
+				],
+				"execution_count": 4
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# 1. Read Dataframe from Raw\n",
+					"abfs_path = f\"abfss://{container_name}@{storage_account_name}.dfs.core.windows.net/{folder_path_origin}\""
+				],
+				"execution_count": 5
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"df_measures = spark.read.format(\"parquet\").load(abfs_path + \"/mediciones\")"
+				],
+				"execution_count": 6
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"df_measures.printSchema()\n",
+					"df_measures.show(5)"
+				],
+				"execution_count": 7
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# 2. Apply Transformations and Validations"
+				],
+				"execution_count": 8
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def validate_data(df):\n",
+					"    \"\"\"\n",
+					"    This function is used to apply the WAP pattern (Write-Audit-Publish)\n",
+					"    \"\"\"\n",
+					"\n",
+					"    # Count rows before cleaning\n",
+					"    row_count_before = df.count()\n",
+					"    print(f\"Number of rows before cleaning: {row_count_before}\")\n",
+					"\n",
+					"    # Remove NULL values from all columns\n",
+					"    df_cleaned = df.dropna(how=\"any\")  # Removes rows where any column has NULL values\n",
+					"\n",
+					"    # Remove duplicates based on all columns\n",
+					"    df_cleaned = df_cleaned.dropDuplicates()\n",
+					"\n",
+					"    # Count rows after cleaning\n",
+					"    row_count_after = df_cleaned.count()\n",
+					"    print(f\"Number of rows after cleaning: {row_count_after}\")\n",
+					"\n",
+					"    return df_cleaned\n",
+					""
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"df_measures_cleaned = validate_data(df_measures)"
+				],
+				"execution_count": 10
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Cast Data Types to avoid Loading Errors \n",
+					"\n",
+					"df_measures_cleaned = df_measures_cleaned.withColumn(\"granos_de_polen_x_metro_cubico\", col(\"granos_de_polen_x_metro_cubico\").cast(IntegerType()))\n",
+					"df_measures_cleaned = df_measures_cleaned.withColumn(\"fecha_lectura\", col(\"fecha_lectura\").cast(StringType()))\n",
+					""
+				],
+				"execution_count": 11
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Reorder columns\n",
+					"df_measures_cleaned = df_measures_cleaned.select(\"tipo_polinico\", \"captador\", \n",
+					"                                                \"granos_de_polen_x_metro_cubico\", \"fecha_lectura\")"
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# 3. Write to Cleaned Folder"
+				],
+				"execution_count": 13
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Build the ADLS Path (ABFS format for direct writing)\n",
+					"adls_path = f\"abfss://{container_name}@{storage_account_name}.dfs.core.windows.net/{folder_path_target}/\""
+				],
+				"execution_count": 14
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Write DataFrame to ADLS in Parquet format\n",
+					"df_measures_cleaned.write.format(file_format).mode(\"overwrite\").option(\"header\", \"true\").save(adls_path + \"/mediciones\") #.partitionBy(\"fecha_lectura\")\n",
+					"\n",
+					"print(f\"Data successfully written to {adls_path}\")"
+				],
+				"execution_count": 15
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Stop the Spark session\n",
+					"spark.stop()"
+				],
+				"execution_count": 54
+			}
+		]
+	}
+}

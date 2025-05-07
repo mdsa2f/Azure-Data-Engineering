@@ -1,0 +1,11 @@
+{
+	"name": "TFG_PowerBI_Workspace",
+	"properties": {
+		"annotations": [],
+		"type": "PowerBIWorkspace",
+		"typeProperties": {
+			"workspaceID": "f6874490-99b0-4247-9037-f2e41b01fac3",
+			"tenantID": "389a7a7f-7893-4c51-892d-cd1bd50d21f6"
+		}
+	}
+}

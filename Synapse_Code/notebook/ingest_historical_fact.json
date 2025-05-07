@@ -1,0 +1,262 @@
+{
+	"name": "ingest_historical_fact",
+	"properties": {
+		"folder": {
+			"name": "src/extraction/fact"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "a182de8c-077e-4fdf-89cc-ef5d333c14ce"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "python"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"import requests\n",
+					"from bs4 import BeautifulSoup\n",
+					"from io import StringIO\n",
+					"\n",
+					"\n",
+					"from pyspark.sql import SparkSession\n",
+					"from pyspark.sql.types import StructType, StructField, StringType\n",
+					"from pyspark.sql.functions import to_date, col, regexp_replace"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"historical_url = \"https://datos.gob.es/es/catalogo/a13002908-historico-de-mediciones-de-polen\""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"headers = {\n",
+					"    \"User-Agent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.78 Safari/537.36\"\n",
+					"}"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"storage_account_name = \"stazdatengtfg\"\n",
+					"container_name = \"data\"\n",
+					"folder_path = \"raw\"\n",
+					"file_format = \"parquet\""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Get or create Spark session\n",
+					"spark = SparkSession.builder.getOrCreate()  "
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def extract_yearly_data(url: str):\n",
+					"    urls = []\n",
+					"    \n",
+					"    try:\n",
+					"        # Fetch CSV content from the URL\n",
+					"        response = requests.get(url, headers = headers)\n",
+					"        if response.status_code != 200:\n",
+					"            raise Exception(f\"Failed to fetch data, status code: {response.status_code}\")\n",
+					"        \n",
+					"        # Ensure proper encoding\n",
+					"        response.encoding = 'utf-8'  \n",
+					"\n",
+					"        # Parse the HTML content\n",
+					"        soup = BeautifulSoup(response.text, 'html.parser')\n",
+					"\n",
+					"        # Find the first <ul> tag inside the div with class \"resource-list\"\n",
+					"        ul = soup.find('ul', class_='resource-list')\n",
+					"        #print(ul)\n",
+					"\n",
+					"        # Iterate over all 'li' elements within the 'ul'\n",
+					"        for li in ul.find_all('li'):\n",
+					"            # Find the 'div' with class 'btn-group' inside the current 'li'\n",
+					"            btn_group = li.find('div', class_='btn-group')\n",
+					"            \n",
+					"            # If the 'btn-group' div exists, get all the 'a' tags (links) inside it\n",
+					"            if btn_group:\n",
+					"                for link in btn_group.find_all('a'):\n",
+					"                    link = link.get('href')\n",
+					"                    if link and link.endswith('.csv'):\n",
+					"                        urls.append(link)\n",
+					"                        print(link)\n",
+					"        \n",
+					"        # Print the text inside the first <p> tag\n",
+					"        if urls:\n",
+					"            #print(\"Correct\")\n",
+					"            return urls\n",
+					"\n",
+					"    except Exception as e:\n",
+					"        print(f\"Error {e}\")\n",
+					"        return None\n",
+					""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\n",
+					"\n",
+					"def extract_from_madrid_url(url: str):\n",
+					"    \"\"\"\n",
+					"    This function gets pollen data from datos.gob.es\n",
+					"\n",
+					"    \"\"\"\n",
+					"    \n",
+					"    # Fetch CSV content from the URL\n",
+					"    response = requests.get(url)\n",
+					"    response.encoding='latin1'\n",
+					"    if response.status_code != 200:\n",
+					"        raise Exception(f\"Failed to fetch data, status code: {response.status_code}\")\n",
+					"\n",
+					"    csv_data = response.text.strip()  # Get CSV content as string\n",
+					"\n",
+					"    # Convert CSV text to list of rows\n",
+					"    lines = csv_data.split(\"\\n\")  # Split by newline\n",
+					"\n",
+					"    # Extract header and remove unwanted characters\n",
+					"    header = [col.strip(\"\\r\") for col in lines[0].split(\";\")]\n",
+					"\n",
+					"    # Process rows, stripping \\r from each field\n",
+					"    data_rows = [list(map(lambda x: x.strip(\"\\r\"), line.split(\";\"))) for line in lines[1:] if line.strip()]\n",
+					"\n",
+					"\n",
+					"    # Define schema dynamically (assuming all fields as StringType for simplicity)\n",
+					"    schema = StructType([StructField(col, StringType(), True) for col in header])\n",
+					"\n",
+					"    # Create Spark DataFrame\n",
+					"    df = spark.createDataFrame(data_rows, schema=schema)\n",
+					"\n",
+					"    print(\"Show 5 first rows: \")\n",
+					"    df.show(5)\n",
+					"\n",
+					"    return df\n",
+					""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def visualize_df(df):\n",
+					"    # Display DataFrame schema\n",
+					"    df.printSchema()\n",
+					"\n",
+					"    # Show first few rows\n",
+					"    df.show(5)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"urls = extract_yearly_data(historical_url)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Initialize an empty DataFrame to hold the merged data\n",
+					"merged_df = None\n",
+					"\n",
+					"# Loop over the URLs and extract data\n",
+					"for url in urls:\n",
+					"    # Assuming extract_from_madrid_url returns a DataFrame\n",
+					"    df_measures = extract_from_madrid_url(url)  # This should return a DataFrame\n",
+					"    if merged_df is None:\n",
+					"        merged_df = df_measures  # Set the first DataFrame as the initial one\n",
+					"    else:\n",
+					"        merged_df = merged_df.union(df_measures)  # Merge the DataFrames\n",
+					"\n",
+					"    print(merged_df.count())\n",
+					"    "
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"merged_df = merged_df.withColumn(\"fecha_lectura\", col(\"fecha_lectura\").substr(1, 10))"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"merged_df = merged_df.withColumn(\"tipo_polinico\", regexp_replace(\"tipo_polinico\", \" \", \"_\"))"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"visualize_df(merged_df)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Build the ADLS Path (ABFS format for direct writing)\n",
+					"adls_path = f\"abfss://{container_name}@{storage_account_name}.dfs.core.windows.net/{folder_path}/\"\n",
+					""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Write DataFrame to ADLS in Parquet format\n",
+					"merged_df.write.format(file_format).mode(\"overwrite\").option(\"header\", \"true\").partitionBy(\"fecha_lectura\").save(adls_path + \"/mediciones\")\n",
+					"\n",
+					"print(f\"Data successfully written to {adls_path}\")"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Stop the Spark session\n",
+					"spark.stop()"
+				],
+				"execution_count": null
+			}
+		]
+	}
+}

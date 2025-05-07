@@ -1,0 +1,20 @@
+{
+	"name": "datawarehouse_creation",
+	"properties": {
+		"folder": {
+			"name": "src/initialization"
+		},
+		"content": {
+			"query": "\n\nCREATE TABLE dim_captadores (\n    id INT IDENTITY(1,1),\n    codigo VARCHAR(64),\n    nombre VARCHAR(255),\n    descripcion VARCHAR(255),\n    url_infoweb VARCHAR(255),\n    direccion_localidad VARCHAR(255),  \n    direccion_ubicacion VARCHAR(255),\n    direccion_codigo_postal INT,\n    zbs_geocodigo INT,\n    zbs_nombre VARCHAR(255),\n    fecha_inicio_mediciones VARCHAR(64),\n    numero_tipos_de_polen_registrados INT,\n    tipos_de_polen_registrados VARCHAR(255),\n    altura_del_captador FLOAT,\n    altitud FLOAT,\n    x_epsg25830 FLOAT,\n    y_epsg25830 FLOAT,\n    lat_epsg4258 FLOAT,\n    long_epsg4258 FLOAT,\n    red_esp_aerobiologia BIT,\n    url_calendario_polinico VARCHAR(255),  \n    edificio VARCHAR(255), \n    departamento_responsable VARCHAR(255), \n    contacto_email VARCHAR(255),\n    tipo_titularidad VARCHAR(255)\n)\nWITH\n(\n    DISTRIBUTION = REPLICATE,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\n\nCREATE TABLE dim_tipos_polen (\n    id INT IDENTITY(1,1),\n    codigo VARCHAR(64),\n    descripcion VARCHAR(512),\n    fecha_creacion DATETIME,\n    fecha_finalizacion DATETIME,\n    es_valor_actual BIT\n)\nWITH\n(\n    DISTRIBUTION = REPLICATE,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\n\nCREATE TABLE staging_mediciones (\n    tipo_polen_codigo VARCHAR(64),\n    captador_codigo VARCHAR(64),\n    granos_polen_metro_cubico INT,\n    fecha_lectura VARCHAR(64)\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\n\nCREATE TABLE fact_mediciones (\n    id INT IDENTITY(1,1),\n    tipo_polen_id INT,\n    captador_id INT,\n    granos_polen_metro_cubico INT,\n    fecha_lectura VARCHAR(64)\n)\nWITH\n(\n    DISTRIBUTION = HASH(fecha_lectura),\n    CLUSTERED COLUMNSTORE INDEX\n);\n\n",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sqlpool",
+				"poolName": "sqlpool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

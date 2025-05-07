@@ -1,0 +1,20 @@
+{
+	"name": "insert_truncate_logic",
+	"properties": {
+		"folder": {
+			"name": "src/loading"
+		},
+		"content": {
+			"query": "--SET IDENTITY_INSERT dim_captadores ON;\n\nSELECT * FROM dim_tipos_polen;\n\nTRUNCATE TABLE dim_tipos_polen;\n\nCOPY INTO dim_tipos_polen (\n    codigo,\n    descripcion\n\n)\nFROM 'https://stazdatengtfg.dfs.core.windows.net/data/cleaned/descripciones_polen'\nWITH (\n    FILE_TYPE = 'PARQUET' \n\n);\n\n\n\n--SET IDENTITY_INSERT dim_captadores OFF;\n\nSELECT * FROM dim_captadores;\n\nTRUNCATE TABLE dim_captadores;\n\nCOPY INTO dim_captadores \n    (codigo,\n    nombre,\n    descripcion,\n    url_infoweb,\n    direccion_localidad,\n    direccion_ubicacion,\n    direccion_codigo_postal,\n    zbs_geocodigo,\n    zbs_nombre,\n    fecha_inicio_mediciones,\n    numero_tipos_de_polen_registrados,\n    tipos_de_polen_registrados,\n    altura_del_captador,\n    altitud,\n    x_epsg25830,\n    y_epsg25830,\n    lat_epsg4258,\n    long_epsg4258,\n    red_esp_aerobiologia,\n    url_calendario_polinico,\n    edificio,\n    departamento_responsable,\n    contacto_email,\n    tipo_titularidad\n    )\nFROM 'https://stazdatengtfg.dfs.core.windows.net/data/cleaned/captadores'\nWITH (\n    FILE_TYPE = 'PARQUET'\n    );\n\n\n\nSELECT * FROM fact_mediciones;\nSELECT * FROM staging_mediciones;\n\n--select count(*) from fact_mediciones;\n\nTRUNCATE TABLE fact_mediciones;\nTRUNCATE TABLE staging_mediciones;\n\nCOPY INTO staging_mediciones\n    (tipo_polen_codigo,\n    captador_codigo,\n    granos_polen_metro_cubico,\n    fecha_lectura\n    )\nFROM 'https://stazdatengtfg.dfs.core.windows.net/data/cleaned/mediciones'\nWITH (\n    FILE_TYPE = 'PARQUET'\n);\n\nINSERT INTO fact_mediciones (tipo_polen_id, captador_id, granos_polen_metro_cubico, fecha_lectura)\nSELECT t.id, c.id, s.granos_polen_metro_cubico, s.fecha_lectura\nFROM staging_mediciones s\nINNER JOIN dim_tipos_polen t ON s.tipo_polen_codigo = t.codigo\nINNER JOIN dim_captadores c ON s.captador_codigo = c.codigo;\n\n\n",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sqlpool",
+				"poolName": "sqlpool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
